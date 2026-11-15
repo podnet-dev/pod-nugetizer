@@ -1,0 +1,9 @@
+<Project Sdk="MSTest.Sdk">
+  <PropertyGroup>
+    <NugetizerIntegrationTest>true</NugetizerIntegrationTest>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="ValueTests.cs" />
+    <PackageReference Include="PodNet.Nugetizer.Fixture" Version="[$(PackageUnderTestVersion)]" />
+  </ItemGroup>
+</Project>

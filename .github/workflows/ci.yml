@@ -1,0 +1,21 @@
+name: CI
+on: [push, pull_request, workflow_dispatch]
+permissions: { contents: read }
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - name: Script tests
+        shell: pwsh
+        run: ./tests/Nugetizer.Tests.ps1
+      - name: Composite fixture
+        uses: ./
+        with:
+          stages: setup test pack integration
+          working-directory: tests/fixtures
+          test-target: tests/Fixture.Tests.csproj
+          integration-target: tests/Fixture.IntegrationTests.csproj
+          pack-target: src/Fixture/Fixture.csproj
+          version: '10.0.0'

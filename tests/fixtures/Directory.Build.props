@@ -1,0 +1,12 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <RootNamespace>PodNet.Nugetizer.$(MSBuildProjectName)</RootNamespace>
+    <UseArtifactsOutput>true</UseArtifactsOutput>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <PackageUnderTestVersion Condition="'$(PackageUnderTestVersion)' == ''">0.0.0-$(Configuration.ToLowerInvariant())</PackageUnderTestVersion>
+    <Version>$(PackageUnderTestVersion)</Version>
+  </PropertyGroup>
+</Project>

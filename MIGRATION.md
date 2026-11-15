@@ -1,0 +1,20 @@
+# v1 → v2
+
+- Update old-owner references to `podnet-dev/pod-nugetizer` and select `v2`.
+- Workflow: `podnet-dev/pod-nugetizer/.github/workflows/default.yml@v2`.
+- The reusable workflow delegates directly to `podnet-dev/pod-nugetizer@v2`.
+- Use keys `stages`, `working-directory`, `test-target`, `integration-target`, `pack-target`, `version`, `nuget-user`.
+- Replace API-key publishing with NuGet Trusted Publishing (OIDC).
+- Grant `contents: write`, `id-token: write` for the default publishing workflow. Configure organization `NUGET_USER` and pass only that named secret: `secrets: { NUGET_USER: '${{ secrets.NUGET_USER }}' }`. Alternatively, pass the profile through `nuget-user` from an Actions variable.
+- Provide the consumer SDK and test-runner selection in its working-root `global.json`.
+- Remove `prepack` from stage selections; it is no longer supported. Both entrypoints default to `checkout setup test pack integration archive publish release`, executed in that fixed order with action-managed checkout.
+- Separate source-reference tests from packaged tests using evaluated properties: `NugetizerIntegrationTest=true` explicitly selects integration; unset or false selects source tests only when `IsTestProject=true` or native MTP's `IsTestingPlatformApplication=true`. Default discovery recursively checks all `.csproj` files under `tests`, skipping `bin`, `obj`, and `artifacts`; filenames do not classify projects. Override with `test-target` or `integration-target`, or omit a stage with no matching projects.
+- Metadata queries are restore-free. Set `IsTestProject=true` directly if a consumer's test identity is only available from a package import after restore; native `MSTest.Sdk` already supplies direct identity.
+- Source tests run in Debug; the Release candidate is packed once, then integration tests run in Release with the resolved `PackageUnderTestVersion` and isolated feed/cache/artifacts. Candidate files are validated as unchanged before publishing those same files.
+- Enable `UseArtifactsOutput` in shared props. Mark package integration projects with `NugetizerIntegrationTest=true` and reference exact `[$(PackageUnderTestVersion)]` versions; see [package integration setup](README.md#package-integration-tests-after-packing). Naming and directories alone do not convert project references into package tests. Custom intermediate paths must honor `ArtifactsPath`, and Package Source Mapping must permit the temporary local feed.
+- Packing selects evaluated `IsPackable=true` in Release, not filename exclusions. Keep test projects `IsPackable=false` to avoid candidate-package restore during pack. If sibling project references become transitive package dependencies, include all required package IDs in the pack target; distinct-version published dependencies stay unchanged.
+- For shared local fixtures, default `PackageUnderTestVersion` conditionally to `0.0.0-$(Configuration.ToLowerInvariant())` and set `Version` from that property in shared props. Explicit CI version arguments take precedence. See [local setup and commands](README.md#testing-locally): pack Release with `Version=0.0.0-release` into `artifacts/package/release` first, then test Release with that `PackageUnderTestVersion` and local feed. `dotnet test` does not automatically pack dependencies.
+- `Get-TestProjects` expands explicit project, directory, or solution targets, skips non-test projects, and rejects test projects belonging to the wrong phase. Native MTP targets may be project directories or explicit project/solution filenames; keep source and packaged tests separate in target overrides.
+- Build and publish share job privileges; use trusted source, tags and inputs.
+
+These notes describe the current API and required consumer changes; existing fixtures and consumers are not assumed to have migrated already. Example and fixture suffixes remain naming conventions, not classifiers.

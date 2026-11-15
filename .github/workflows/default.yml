@@ -1,51 +1,28 @@
-name: podNET opinionated .NET build, test and NuGet publish GitHub Workflow
+name: NuGet publishing
 on:
   workflow_call:
     inputs:
-      skip-auto-checkout: { type: boolean }
-      skip-auto-setup-dotnet: { type: boolean }
-      skip-prepack-debug: { type: boolean }
-      skip-test: { type: boolean }
-      skip-pack: { type: boolean }
-      version: { default: "$(echo ${{ github.ref_name }} | sed 's/^v//')", type: string }
-      commit: { default: "${{ github.sha }}", type: string }
-      nuget-source: { default: "https://api.nuget.org/v3/index.json", type: string }
-      skip-store-artifact: { type: boolean }
-      skip-store-release: { type: boolean }
+      stages: { type: string, default: 'checkout setup test pack integration archive publish release' }
+      working-directory: { type: string, default: '.' }
+      test-target: { type: string }
+      integration-target: { type: string }
+      pack-target: { type: string }
+      version: { type: string }
+      nuget-user: { type: string }
     secrets:
-      NUGET_API_KEY: { required: false }
-
+      NUGET_USER: { required: false }
+concurrency: { group: 'nugetizer-${{ github.repository }}-${{ github.ref }}', cancel-in-progress: false }
 jobs:
-  default:
+  publish:
     runs-on: ubuntu-latest
-    defaults: { run: { shell: pwsh } }
-    steps:      
-    - if: ${{ !inputs.skip-auto-checkout }}
-      uses: actions/checkout@v4
-    - if: ${{ !inputs.skip-auto-setup-dotnet }}
-      uses: actions/setup-dotnet@v4
-    - if: ${{ !inputs.skip-prepack-debug }}
-      run: foreach ($csproj in Get-ChildItem src\*.csproj -File -Recurse) { dotnet pack $csproj.FullName -c debug }
-      name: dotnet pack src\*.csproj -c debug
-    - if: ${{ !inputs.skip-test }}
-      run: dotnet test
-    - if: ${{ !inputs.skip-pack }}
-      run: dotnet pack -c release -p:Version=${{ inputs.version }} -p:RepositoryCommit=${{ inputs.commit }}
-    - run: |
-           if ("${{ secrets.NUGET_API_KEY }}") { 
-             if (Get-Item "./artifacts/package/release/*0.0.0*.*nupkg") { 
-               throw "Invalid *0.0.0*.*nupkg package in ./artifacts/package/release/"
-             }
-             dotnet nuget push ./artifacts/package/release/*.nupkg -k ${{ secrets.NUGET_API_KEY }} -s ${{ inputs.nuget-source }} 
-           }
-      name: dotnet nuget push ./artifacts/package/release/*.nupkg -s ${{ inputs.nuget-source }}
-    - if: ${{ !inputs.skip-store-artifact }}
-      uses: actions/upload-artifact@v4
-      with: 
-        path: ./artifacts/package/release/*.*nupkg
-        if-no-files-found: error
-    - if: ${{ !inputs.skip-store-release }}
-      uses: softprops/action-gh-release@v2
-      with:
-        files: ./artifacts/package/release/*.*nupkg
-        
+    permissions: { contents: write, id-token: write }
+    steps:
+      - uses: podnet-dev/pod-nugetizer@v2
+        env: { NUGET_USER: '${{ inputs.nuget-user || secrets.NUGET_USER }}' }
+        with:
+          stages: ${{ inputs.stages }}
+          working-directory: ${{ inputs.working-directory }}
+          test-target: ${{ inputs.test-target }}
+          integration-target: ${{ inputs.integration-target }}
+          pack-target: ${{ inputs.pack-target }}
+          version: ${{ inputs.version }}

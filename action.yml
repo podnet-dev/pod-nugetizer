@@ -1,49 +1,74 @@
-name: podNET opinionated .NET build, test and NuGet publish GitHub Action
-description: An opinionated tool for building, testing and publishing .NET projects as NuGet packages.
-branding: { icon: gift, color: purple }
+name: pod-nugetizer
+description: Build, test and publish NuGet packages using Trusted Publishing.
 inputs:
-  skip-auto-checkout: { }
-  skip-auto-setup-dotnet: { }
-  skip-prepack-debug: { }
-  skip-test: { }
-  skip-pack: { }
-  nuget-push-api-key: { }
-  version: { default: "$(echo ${{ github.ref_name }} | sed 's/^v//')" }
-  commit: { default: "${{ github.sha }}" }
-  nuget-source: { default: "https://api.nuget.org/v3/index.json" }
-  skip-store-artifact: { }
-  skip-store-release: { }
+  stages: { description: 'Stages to run, in pipeline order.', default: 'checkout setup test pack integration archive publish release' }
+  working-directory: { description: 'Consumer project root.', default: '.' }
+  test-target: { description: 'Test project or solution.' }
+  integration-target: { description: 'Package integration test project or solution.' }
+  pack-target: { description: 'Distributable project or solution.' }
+  version: { description: 'Release version; defaults to the tag.' }
+  nuget-user: { description: 'NuGet policy creator; defaults to NUGET_USER.' }
+outputs:
+  directory: { description: 'Package staging directory.', value: '${{ steps.prepare.outputs.directory }}' }
 runs:
   using: composite
   steps:
-    - if: ${{ !inputs.skip-auto-checkout }}
-      uses: actions/checkout@v4
-    - if: ${{ !inputs.skip-auto-setup-dotnet }}
-      uses: actions/setup-dotnet@v4
-    - if: ${{ !inputs.skip-prepack-debug }}
-      run: foreach ($csproj in Get-ChildItem src\*.csproj -File -Recurse) { dotnet pack $csproj.FullName -c debug }
+    - id: prepare
       shell: pwsh
-    - if: ${{ !inputs.skip-test }}
-      run: dotnet test
-      shell: bash
-    - if: ${{ !inputs.skip-pack }}
-      run: dotnet pack -c release -p:Version=${{ inputs.version }} -p:RepositoryCommit=${{ inputs.commit }}
+      env:
+        NG_INPUTS: ${{ toJSON(inputs) }}
+        NG_USER: ${{ inputs.nuget-user || env.NUGET_USER }}
+        NG_DIRECTORY: ${{ steps.prepare.outputs.directory }}
+        NG_SCRIPT: ${{ github.action_path }}/scripts/Nugetizer.ps1
+      run: '& $env:NG_SCRIPT -Phase prepare'
+    - if: ${{ steps.prepare.outputs.checkout == 'true' }}
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      with: { persist-credentials: false }
+    - if: ${{ steps.prepare.outputs.setup == 'true' }}
+      uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+      with: { global-json-file: '${{ inputs.working-directory }}/global.json' }
+    - name: Test, pack and integration
       shell: pwsh
-    - if: ${{ inputs.nuget-push-api-key }}
-      run: |
-           if ls ./artifacts/package/release/*0.0.0*.*nupkg 1> /dev/null 2>&1; then
-             echo "::error title=Invalid package::Invalid *0.0.0*.*nupkg package in ./artifacts/package/release/"
-             exit 1
-           fi
-           dotnet nuget push ./artifacts/package/release/*.nupkg -k ${{ inputs.nuget-push-api-key }} -s ${{ inputs.nuget-source }}
-      shell: bash
-    - if: ${{ !inputs.skip-store-artifact }}
-      uses: actions/upload-artifact@v4
-      with: 
-        path: ./artifacts/package/release/*.*nupkg
-        if-no-files-found: error
-    - if: ${{ !inputs.skip-store-release }}
-      uses: softprops/action-gh-release@v2
+      env:
+        NG_INPUTS: ${{ toJSON(inputs) }}
+        NG_DIRECTORY: ${{ steps.prepare.outputs.directory }}
+        NG_SCRIPT: ${{ github.action_path }}/scripts/Nugetizer.ps1
+      run: '& $env:NG_SCRIPT -Phase build'
+    - if: ${{ steps.prepare.outputs.archive == 'true' }}
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
-        files: ./artifacts/package/release/*.*nupkg
-        
+        name: nuget-${{ github.run_id }}-${{ github.run_attempt }}
+        path: |
+          ${{ steps.prepare.outputs.directory }}/*.*nupkg
+          ${{ steps.prepare.outputs.directory }}/manifest.json
+        if-no-files-found: error
+    - name: Release preflight
+      if: ${{ steps.prepare.outputs.release == 'true' }}
+      shell: pwsh
+      env:
+        NG_INPUTS: ${{ toJSON(inputs) }}
+        NG_SCRIPT: ${{ github.action_path }}/scripts/Nugetizer.ps1
+        GH_TOKEN: ${{ github.token }}
+      run: '& $env:NG_SCRIPT -Phase preflight'
+    - id: login
+      if: ${{ steps.prepare.outputs.publish == 'true' }}
+      uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1
+      with: { user: '${{ inputs.nuget-user || env.NUGET_USER }}' }
+    - name: Publish
+      if: ${{ steps.prepare.outputs.publish == 'true' }}
+      shell: pwsh
+      env:
+        NG_INPUTS: ${{ toJSON(inputs) }}
+        NG_DIRECTORY: ${{ steps.prepare.outputs.directory }}
+        NG_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        NG_SCRIPT: ${{ github.action_path }}/scripts/Nugetizer.ps1
+      run: '& $env:NG_SCRIPT -Phase publish'
+    - if: ${{ steps.prepare.outputs.release == 'true' }}
+      name: GitHub release
+      shell: pwsh
+      env:
+        NG_INPUTS: ${{ toJSON(inputs) }}
+        NG_DIRECTORY: ${{ steps.prepare.outputs.directory }}
+        NG_SCRIPT: ${{ github.action_path }}/scripts/Nugetizer.ps1
+        GH_TOKEN: ${{ github.token }}
+      run: '& $env:NG_SCRIPT -Phase release'

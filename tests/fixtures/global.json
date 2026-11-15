@@ -1,0 +1,5 @@
+{
+  "sdk": { "version": "11.0.100", "rollForward": "latestPatch" },
+  "test": { "runner": "Microsoft.Testing.Platform" },
+  "msbuild-sdks": { "MSTest.Sdk": "4.5.3" }
+}
