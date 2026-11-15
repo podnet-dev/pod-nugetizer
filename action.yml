@@ -22,10 +22,10 @@ runs:
         NG_SCRIPT: ${{ github.action_path }}/scripts/Nugetizer.ps1
       run: '& $env:NG_SCRIPT -Phase prepare'
     - if: ${{ steps.prepare.outputs.checkout == 'true' }}
-      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with: { persist-credentials: false }
     - if: ${{ steps.prepare.outputs.setup == 'true' }}
-      uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+      uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
       with: { global-json-file: '${{ inputs.working-directory }}/global.json' }
     - name: Test, pack and integration
       shell: pwsh
@@ -35,7 +35,7 @@ runs:
         NG_SCRIPT: ${{ github.action_path }}/scripts/Nugetizer.ps1
       run: '& $env:NG_SCRIPT -Phase build'
     - if: ${{ steps.prepare.outputs.archive == 'true' }}
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: nuget-${{ github.run_id }}-${{ github.run_attempt }}
         path: |
@@ -52,7 +52,7 @@ runs:
       run: '& $env:NG_SCRIPT -Phase preflight'
     - id: login
       if: ${{ steps.prepare.outputs.publish == 'true' }}
-      uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1
+      uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
       with: { user: '${{ inputs.nuget-user || env.NUGET_USER }}' }
     - name: Publish
       if: ${{ steps.prepare.outputs.publish == 'true' }}
